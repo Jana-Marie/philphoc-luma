@@ -1,0 +1,13 @@
+build/
+bom/
+*.bin
+*.elf
+*.hex
+
+# kicad
+*-backups
+gerber
+fp-info-cache
+*-bak
+*.step
+*.stp
