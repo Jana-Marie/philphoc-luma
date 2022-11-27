@@ -3,6 +3,9 @@ bom/
 *.bin
 *.elf
 *.hex
+*.jdebug
+*.jdebug.user
+*.ioc
 
 # kicad
 *-backups
