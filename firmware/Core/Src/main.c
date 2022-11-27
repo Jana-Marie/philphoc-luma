@@ -21,7 +21,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include <string.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -41,8 +41,10 @@
 
 /* Private variables ---------------------------------------------------------*/
 ADC_HandleTypeDef hadc1;
+DMA_HandleTypeDef hdma_adc1;
 
 SPI_HandleTypeDef hspi1;
+DMA_HandleTypeDef hdma_spi1_tx;
 
 TIM_HandleTypeDef htim3;
 
@@ -53,11 +55,12 @@ TIM_HandleTypeDef htim3;
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
-static void MX_ADC1_Init(void);
+static void MX_DMA_Init(void);
 static void MX_TIM3_Init(void);
 static void MX_SPI1_Init(void);
+static void MX_ADC1_Init(void);
 /* USER CODE BEGIN PFP */
-#define WS2812_NUM_LEDS 3
+#define WS2812_NUM_LEDS 120
 #define WS2812_SPI_HANDLE hspi1
 
 #define WS2812_RESET_PULSE 60
@@ -65,11 +68,17 @@ static void MX_SPI1_Init(void);
 
 uint8_t ws2812_buffer[WS2812_BUFFER_SIZE];
 
-
 void ws2812_init(void);
 void ws2812_send_spi(void);
 void ws2812_pixel(uint16_t led_no, uint8_t r, uint8_t g, uint8_t b);
 void ws2812_pixel_all(uint8_t r, uint8_t g, uint8_t b);
+long map(long x, long in_min, long in_max, long out_min, long out_max);
+
+int16_t adc_color[4];
+int16_t adc_filt[3];
+uint8_t hue_color[3];
+
+uint16_t wakeup;
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -105,25 +114,42 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  MX_ADC1_Init();
+  MX_DMA_Init();
   MX_TIM3_Init();
   MX_SPI1_Init();
+  MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
   ws2812_init();
-
+  HAL_ADC_Start_DMA(&hadc1, (uint32_t *) adc_color, 4);
+  HAL_TIM_Base_Start(&htim3);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-    for(int i = 0; i <= 255; i++){
-      ws2812_pixel(0,i,0,0);
-      ws2812_pixel(1,0,i,0);
-      ws2812_pixel(2,0,0,i);
-      ws2812_send_spi();
+    adc_filt[0] = adc_filt[0] * 0.98 + adc_color[1] * 0.02;
+    adc_filt[1] = adc_filt[1] * 0.98 + adc_color[2] * 0.02;
+    adc_filt[2] = adc_filt[2] * 0.98 + adc_color[3] * 0.02;
+    if (adc_color[1] >= 4094 && adc_color[2] >= 4094 && adc_color[3] >= 4094) {
+      hue_color[0] = 0;
+      hue_color[1] = 0;
+      hue_color[2] = 0;
+      wakeup = 50;
+      ws2812_pixel_all(0,0,0);
       HAL_Delay(50);
+    } else {
+      hue_color[0] = map(adc_filt[0], 0, 4070, wakeup, 0);
+      hue_color[1] = map(adc_filt[1], 0, 4070, wakeup, 0);
+      hue_color[2] = map(adc_filt[2], 0, 4070, wakeup, 0);
+      wakeup++;
+      if (wakeup > 255) {
+        wakeup = 255;
+      }
+      ws2812_pixel_all(hue_color[0], hue_color[1], hue_color[2]);
+      HAL_Delay(1);
     }
+    ws2812_send_spi();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -197,11 +223,11 @@ static void MX_ADC1_Init(void)
   /** Configure the global features of the ADC (Clock, Resolution, Data Alignment and number of conversion)
   */
   hadc1.Instance = ADC1;
-  hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV2;
+  hadc1.Init.ClockPrescaler = ADC_CLOCK_ASYNC_DIV1;
   hadc1.Init.Resolution = ADC_RESOLUTION_12B;
   hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
-  hadc1.Init.ScanConvMode = ADC_SCAN_DISABLE;
-  hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
+  hadc1.Init.ScanConvMode = ADC_SCAN_SEQ_FIXED;
+  hadc1.Init.EOCSelection = ADC_EOC_SEQ_CONV;
   hadc1.Init.LowPowerAutoWait = DISABLE;
   hadc1.Init.LowPowerAutoPowerOff = DISABLE;
   hadc1.Init.ContinuousConvMode = DISABLE;
@@ -209,10 +235,9 @@ static void MX_ADC1_Init(void)
   hadc1.Init.DiscontinuousConvMode = DISABLE;
   hadc1.Init.ExternalTrigConv = ADC_EXTERNALTRIG_T3_TRGO;
   hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_RISING;
-  hadc1.Init.DMAContinuousRequests = DISABLE;
-  hadc1.Init.Overrun = ADC_OVR_DATA_PRESERVED;
+  hadc1.Init.DMAContinuousRequests = ENABLE;
+  hadc1.Init.Overrun = ADC_OVR_DATA_OVERWRITTEN;
   hadc1.Init.SamplingTimeCommon1 = ADC_SAMPLETIME_7CYCLES_5;
-  hadc1.Init.SamplingTimeCommon2 = ADC_SAMPLETIME_7CYCLES_5;
   hadc1.Init.OversamplingMode = DISABLE;
   hadc1.Init.TriggerFrequencyMode = ADC_TRIGGER_FREQ_HIGH;
   if (HAL_ADC_Init(&hadc1) != HAL_OK)
@@ -222,9 +247,32 @@ static void MX_ADC1_Init(void)
 
   /** Configure Regular Channel
   */
+  sConfig.Channel = ADC_CHANNEL_5;
+  sConfig.Rank = ADC_RANK_CHANNEL_NUMBER;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Regular Channel
+  */
   sConfig.Channel = ADC_CHANNEL_6;
-  sConfig.Rank = ADC_REGULAR_RANK_1;
-  sConfig.SamplingTime = ADC_SAMPLINGTIME_COMMON_1;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Regular Channel
+  */
+  sConfig.Channel = ADC_CHANNEL_7;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Regular Channel
+  */
+  sConfig.Channel = ADC_CHANNEL_8;
   if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
   {
     Error_Handler();
@@ -296,7 +344,7 @@ static void MX_TIM3_Init(void)
   htim3.Instance = TIM3;
   htim3.Init.Prescaler = 0;
   htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim3.Init.Period = 16000;
+  htim3.Init.Period = 64000-1;
   htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
   if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
@@ -308,7 +356,7 @@ static void MX_TIM3_Init(void)
   {
     Error_Handler();
   }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
   sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
   if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
   {
@@ -317,6 +365,25 @@ static void MX_TIM3_Init(void)
   /* USER CODE BEGIN TIM3_Init 2 */
 
   /* USER CODE END TIM3_Init 2 */
+
+}
+
+/**
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void)
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA1_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA1_Channel1_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
+  /* DMA1_Channel2_3_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel2_3_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel2_3_IRQn);
 
 }
 
@@ -335,20 +402,20 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-
+// based on https://www.newinnovations.nl/post/controlling-ws2812-and-ws2812b-using-only-stm32-spi/
 void ws2812_init(void) {
     memset(ws2812_buffer, 0, WS2812_BUFFER_SIZE);
     ws2812_send_spi();
 }
 
 void ws2812_send_spi(void) {
-    HAL_SPI_Transmit(&WS2812_SPI_HANDLE, ws2812_buffer, WS2812_BUFFER_SIZE, HAL_MAX_DELAY);
+    HAL_SPI_Transmit_DMA(&WS2812_SPI_HANDLE, ws2812_buffer, WS2812_BUFFER_SIZE);
 }
 
 #define WS2812_FILL_BUFFER(COLOR) \
     for( uint8_t mask = 0x80; mask; mask >>= 1 ) { \
         if( COLOR & mask ) { \
-            *ptr++ = 0xfc; \
+            *ptr++ = 0xf8; \
         } else { \
             *ptr++ = 0x80; \
         } \
@@ -370,6 +437,9 @@ void ws2812_pixel_all(uint8_t r, uint8_t g, uint8_t b) {
     }
 }
 
+long map(long x, long in_min, long in_max, long out_min, long out_max){
+  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
 /* USER CODE END 4 */
 
 /**
