@@ -2029,6 +2029,10 @@
     (uuid feafeda2-e17c-4da1-ad43-0d727bf0e574)
   )
 
+  (text "Optional" (at 64.77 93.98 0)
+    (effects (font (size 1.27 1.27)) (justify left bottom))
+    (uuid 2c013153-3971-49f8-a330-a9d8438dfe15)
+  )
   (text "5V-12V\n" (at 243.84 80.01 0)
     (effects (font (size 1.27 1.27)) (justify left bottom))
     (uuid 9e576208-b18a-4e24-97cb-4523883105f2)
@@ -3110,7 +3114,7 @@
     (property "Reference" "R2" (id 0) (at 59.69 82.5499 0)
       (effects (font (size 1.27 1.27)) (justify right))
     )
-    (property "Value" "5k1" (id 1) (at 59.69 85.0899 0)
+    (property "Value" "200" (id 1) (at 59.69 85.0899 0)
       (effects (font (size 1.27 1.27)) (justify right))
     )
     (property "Footprint" "otter:R_0402" (id 2) (at 62.23 83.82 0)
@@ -4041,7 +4045,7 @@
       (reference "R1") (unit 1) (value "20") (footprint "otter:R_0402")
     )
     (path "/4335c9f2-6efb-4b5c-8474-bc3351b7a55c"
-      (reference "R2") (unit 1) (value "5k1") (footprint "otter:R_0402")
+      (reference "R2") (unit 1) (value "200") (footprint "otter:R_0402")
     )
     (path "/00000000-0000-0000-0000-000061cb9bfe"
       (reference "R3") (unit 1) (value "5k1") (footprint "otter:R_0402")
